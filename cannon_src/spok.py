@@ -48,9 +48,10 @@ while not exit:
 	b_file.close()
 
 
-	submit = subprocess.check_output("llsubmit " + new_batch_name, shell=True)
-	print(Submited)
-	#call(['llsubmit', new_batch_name])	
+	#submit = subprocess.check_output("llsubmit " + new_batch_name + " > dummy ", shell=True)
+	print(60 * 'o')
+	call(['llsubmit', new_batch_name])	
+	print(60 * 'o')
 
 	running = True
 	# Waiting for output
@@ -58,9 +59,11 @@ while not exit:
 		sleep(1)
 		out = subprocess.check_output("llq -u h039y11", shell=True)
 		if (out.startswith('llq: The')):
+			sleep(2)
 			running = False
 		
 	# Parsing output
+	# Check if the file exists, if not wait
 	output_file_name = 'cannon_64_{0}.out'.format(rnd)
 	with open(output_file_name, 'r') as output_file:
 		# Variable containing the current matrix size
@@ -83,13 +86,16 @@ while not exit:
 	counter += 1
 	# compute intervals
 	if (counter > 2):
-		print(20 * '*')
+		print(60 * '*')
 		print(counter)
 		c_means, c_devs, c_ci = means_devs_ci(comp_results_dct)
 		m_means, m_devs, m_ci = means_devs_ci(mpi_results_dct)		
 		print('Max confidence interval (%) in computation time is {0}'.format(max(c_ci.values() ) ) )
 		print('Max confidence interval (%) in mpi time is {0}'.format(max(m_ci.values() ) ) )
 		print(m_ci.values())
-		
+		print(m_means.values())
+		print(m_devs.values())
+		print(60 * '*')
+				
 print("End Spok")
 
