@@ -15,6 +15,7 @@ int main (int argc, char **argv) {
 	MPI_Status status; 
 	MPI_Request recv_request_1;
 	MPI_Request recv_request_2;
+	MPI_Request send_request_1, send_request_2;
 
 	// used to manage the cartesian grid
 	int dimensions[2], periods[2], coordinates[2], remain_dims[2];
@@ -138,7 +139,8 @@ int main (int argc, char **argv) {
 	for(i=0; i < A_local_block_rows * B_local_block_columns; i++){
 		C_local_block[i] = 0;
 	}
-
+	
+	
 	// full arrays only needed at root
 	if(rank == 0){
 		A_array = (double *) malloc(sizeof(double) * A_rows * A_columns);
@@ -178,6 +180,7 @@ int main (int argc, char **argv) {
 		}
 		for(i = 0; i < A_local_block_size; i++){
 			A_local_block[i] = A_array[i];
+			
 		}
 		for(i = 0; i < B_local_block_size; i++){
 			B_local_block[i] = B_array[i];
@@ -195,6 +198,11 @@ int main (int argc, char **argv) {
 	for(cannon_block_cycle = 0; cannon_block_cycle < sqrt_size; cannon_block_cycle++){
 		// compute partial result for this block cycle
 		start_comm = MPI_Wtime();
+		MPI_Isend(A_local_block, A_local_block_size, MPI_DOUBLE, 
+				(coordinates[1] + sqrt_size - 1) % sqrt_size, 0, row_communicator, &send_request_1);
+		// rotate blocks vertically
+		MPI_Isend(B_local_block, B_local_block_size, MPI_DOUBLE, 
+				(coordinates[0] + sqrt_size - 1) % sqrt_size, 0, column_communicator, &send_request_2);
 		MPI_Irecv(A_local_block_new, A_local_block_size, MPI_DOUBLE, (coordinates[1] + 1) % sqrt_size, 0, row_communicator, &recv_request_1);
 		MPI_Irecv(B_local_block_new, B_local_block_size, MPI_DOUBLE, (coordinates[0] + 1) % sqrt_size, 0, column_communicator, &recv_request_2);
 		mpi_time += MPI_Wtime() - start_comm;
@@ -222,14 +230,19 @@ int main (int argc, char **argv) {
 		start_comm = MPI_Wtime();
 		// rotate blocks horizontally
 
-		MPI_Send(A_local_block, A_local_block_size, MPI_DOUBLE, 
-				(coordinates[1] + sqrt_size - 1) % sqrt_size, 0, row_communicator);
-		// rotate blocks vertically
-		MPI_Send(B_local_block, B_local_block_size, MPI_DOUBLE, 
-				(coordinates[0] + sqrt_size - 1) % sqrt_size, 0, column_communicator);
+		MPI_Wait(&send_request_1, &status);
+		MPI_Wait(&send_request_2, &status);	
 		MPI_Wait(&recv_request_1, &status);
 		MPI_Wait(&recv_request_2, &status);
 		mpi_time += MPI_Wtime() - start_comm;
+		
+		double * tmp_A = A_local_block;
+		A_local_block = A_local_block_new;
+		A_local_block_new = tmp_A;
+		
+		double * tmp_B = B_local_block;
+		B_local_block = B_local_block_new;
+		B_local_block_new = tmp_B;
 	}
 
 	// get C parts from other processes at rank 0
