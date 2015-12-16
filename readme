@@ -1,0 +1,1 @@
+python doctorwho.py -prec=0.01 -maxmins=25 -size=64 -exe=cannon -prelim=4 -merge=1
