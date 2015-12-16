@@ -71,6 +71,24 @@ def ParseDcts(file_name, comp_results_dct, mpi_results_dct):
 				mpi_results_dct[cur_matrix_size].append(mpi_time)
 	return comp_results_dct, mpi_results_dct
 
+def ParseDctsOfSize(file_name, comp_results_dct, mpi_results_dct, size):
+	while not os.path.isfile(file_name):
+		sleep(1)
+	if not size in comp_results_dct:
+		print("Key {0} created".format(size))
+		comp_results_dct[size] = []
+		mpi_results_dct[size] = []
+	with open(file_name, 'r') as output_file:
+		for line in output_file:
+			if line.startswith('Computation time:'):
+				comp_time = float(re.findall('\d+\.\d+', line)[0])
+				comp_results_dct[size].append(comp_time)
+			elif line.startswith('MPI time:'):
+				mpi_time = float(re.findall('\d+\.\d+', line)[0])
+				mpi_results_dct[size].append(mpi_time)
+	return comp_results_dct, mpi_results_dct
+
+
 def AdjustList(mpi_res, mtx_size):
 	if len(mpi_res[mtx_size]) <= 1:
 		raise NameError("List too small")
@@ -155,13 +173,15 @@ WaitOutput()
 
 comp_res = {}
 mpi_res = {}
-comp_res, mpi_res = ParseDcts(output_prelim, comp_res, mpi_res)
+comp_res, mpi_res = ParseDctsOfSize(output_prelim, comp_res, mpi_res, mtx_size)
 mpi_dct = mpi_res
+print("SIZE: {0}".format(len(mpi_dct[mtx_size])))
 if merge == 1:
 	new_mpi = AdjustList(mpi_res, mtx_size)
 	print(mpi_res[mtx_size])
 	print(new_mpi)
 	mpi_dct = { mtx_size: new_mpi }
+	print("SIZ in: {0}".format(len(mpi_dct[mtx_size])))
 # Now we can estimate the variation
 m_means, m_devs, m_ci = means_devs_ci(mpi_dct)
 sigma = m_devs[mtx_size]
@@ -181,19 +201,22 @@ if prelim_size < est_n:
 	print(60 * 'q')
 	
 	WaitOutput()
-	comp_res, mpi_res = ParseDcts(output_prelim, comp_res, mpi_res)
+	comp_res, mpi_res = ParseDctsOfSize(output_main, comp_res, mpi_res, mtx_size)
 	mpi_dct = mpi_res
+	print("SIZE main: {0}".format(len(mpi_dct[mtx_size])))
 	if merge == 1:
 		new_mpi = AdjustList(mpi_res, mtx_size)
 		print(mpi_res[mtx_size])
 		print(new_mpi)
 		mpi_dct = { mtx_size: new_mpi }
+		print("SIZE main in: {0}".format(len(mpi_dct[mtx_size])))
 
 c_means, c_devs, c_ci = means_devs_ci(comp_res)
+print("SIZE: {0}".format(len(mpi_dct[mtx_size])))
 m_means, m_devs, m_ci = means_devs_ci(mpi_dct)	
 with open('stat_{0}.csv'.format(mtx_size), 'w') as stat_file:
 	stat_file.write('\n')
-	stat_file.write(';Runs:;{0};;Size:;{1}'.format(est_n, mtx_size))
+	stat_file.write(';Runs:;{0};;Size:;{1}'.format(int(est_n), mtx_size))
 	stat_file.write('\n;Computation time statistics\n;')
 	for key, val in c_means.items():#:#:
 		stat_file.write(str(key) + ';')
