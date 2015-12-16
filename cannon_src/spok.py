@@ -1,4 +1,5 @@
 import os
+import os.path
 import subprocess;
 from subprocess import call
 from time import sleep
@@ -6,7 +7,11 @@ from random import randint
 import re
 from math import sqrt
 
+sigmas = 1
+runs = 20
+
 def means_devs_ci(dct_of_lst):
+	print('FUNC ' * 10)
 	dev_dct = {}
 	mean_dct = {}
 	ci_dct = {}
@@ -14,10 +19,11 @@ def means_devs_ci(dct_of_lst):
 		lst_mean = sum(lst) / len(lst)
 		lst_sq = [x**2 for x in lst]
 		lst_sq_mean = sum(lst_sq) / len(lst_sq)
-		dev_dct[key] = sqrt(lst_sq_mean - lst_mean**2)
+		print('{0}: {1}'.format(key, lst_sq_mean - lst_mean**2))
+		dev_dct[key] = sqrt(max(lst_sq_mean - lst_mean**2, 0))
 		mean_dct[key] = lst_mean
 		# percentage of 95% confidence interval
-		ci_dct[key] = (2 * dev_dct[key] / sqrt(len(lst))) / lst_mean * 100
+		ci_dct[key] = (sigmas * dev_dct[key] / sqrt(len(lst))) / lst_mean * 100
 			
 	return mean_dct, dev_dct, ci_dct
 
@@ -25,7 +31,10 @@ def means_devs_ci(dct_of_lst):
 
 
 print("Start Spok")
-def_batch_name = 'll-64-ibm.sh'
+#def_batch_name = 'll-64-ibm.sh'
+#def_batch_name = 'batch_optim.sh'
+def_batch_name = 'batch_small.sh'
+
 comp_results_dct = {}
 mpi_results_dct = {}
 exit = False
@@ -59,18 +68,18 @@ while not exit:
 		sleep(1)
 		out = subprocess.check_output("llq -u h039y11", shell=True)
 		if (out.startswith('llq: The')):
-			sleep(2)
 			running = False
 		
 	# Parsing output
-	# Check if the file exists, if not wait
 	output_file_name = 'cannon_64_{0}.out'.format(rnd)
+	while not os.path.isfile(output_file_name):
+		sleep(1)
 	with open(output_file_name, 'r') as output_file:
 		# Variable containing the current matrix size
 		cur_matrix_size = 0
 		for line in output_file:
 			if line.startswith('('):
-				cur_matrix_size = int(line[1:line.find(',')])
+				cur_matrix_size = int(re.findall(r'[1-9][0-9]*', line)[0])
 				if not cur_matrix_size in comp_results_dct:
 					comp_results_dct[cur_matrix_size] = []
 					mpi_results_dct[cur_matrix_size] = []
@@ -85,17 +94,54 @@ while not exit:
 	
 	counter += 1
 	# compute intervals
-	if (counter > 2):
+	if counter > 2:
 		print(60 * '*')
 		print(counter)
 		c_means, c_devs, c_ci = means_devs_ci(comp_results_dct)
 		m_means, m_devs, m_ci = means_devs_ci(mpi_results_dct)		
 		print('Max confidence interval (%) in computation time is {0}'.format(max(c_ci.values() ) ) )
 		print('Max confidence interval (%) in mpi time is {0}'.format(max(m_ci.values() ) ) )
-		print(m_ci.values())
+		#print(m_ci.values())
 		print(m_means.values())
-		print(m_devs.values())
+		#print(m_devs.values())
 		print(60 * '*')
+		
+	if counter == runs:
+		exit = True
+	
+c_means, c_devs, c_ci = means_devs_ci(comp_results_dct)
+m_means, m_devs, m_ci = means_devs_ci(mpi_results_dct)	
+with open('stat.csv', 'w') as stat_file:
+	stat_file.write('\n')
+	stat_file.write(';Computation time statistics\n;')
+	for key, val in c_means.items():#:#:
+		stat_file.write(str(key) + ';')
+	stat_file.write('\nmeans:;')
+	for key, val in c_means.items():#:#:
+		stat_file.write(str(val) + ';')
+	stat_file.write('\ndevs:;')
+	for key, val in c_devs.items():#:#:
+		stat_file.write(str(val) + ';')
+	stat_file.write('\nconf.int({0}):;'.format(sigmas))
+	for key, val in c_ci.items():#:#:
+		stat_file.write(str(val) + ';')
+		
+	stat_file.write('\n\n\n')
+	stat_file.write(';MPI time statistics\n;')
+	for key, val in c_means.items():#:
+		stat_file.write(str(key) + ';')
+	stat_file.write('\nmeans:;')
+	for key, val in m_means.items():#:
+		stat_file.write(str(val) + ';')
+	stat_file.write('\ndevs:;')
+	for key, val in m_devs.items():#:
+		stat_file.write(str(val) + ';')
+	stat_file.write('\nconf.int({0}):;'.format(sigmas))
+	for key, val in m_ci.items():#:
+		stat_file.write(str(val) + ';')
+	
+	stat_file.write('\n\n\n')
+
 				
 print("End Spok")
 
