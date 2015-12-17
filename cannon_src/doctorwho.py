@@ -71,13 +71,23 @@ def ParseDcts(file_name, comp_results_dct, mpi_results_dct):
 				mpi_results_dct[cur_matrix_size].append(mpi_time)
 	return comp_results_dct, mpi_results_dct
 
-def ParseDctsOfSize(file_name, comp_results_dct, mpi_results_dct, size):
+def ParseDctsOfSize(file_name, comp_results_dct, mpi_results_dct, size, times):
 	while not os.path.isfile(file_name):
 		sleep(1)
 	if not size in comp_results_dct:
 		print("Key {0} created".format(size))
 		comp_results_dct[size] = []
 		mpi_results_dct[size] = []
+	
+	times_in_file = 0
+	while times_in_file != times
+		times_in_file = 0
+		with open(file_name, 'r') as output_file:
+			for line in output_file:
+				if line.startswith('MPI time:'):
+					times_in_file += 1		
+				
+	
 	with open(file_name, 'r') as output_file:
 		for line in output_file:
 			if line.startswith('Computation time:'):
@@ -174,7 +184,7 @@ WaitOutput()
 
 comp_res = {}
 mpi_res = {}
-comp_res, mpi_res = ParseDctsOfSize(output_prelim, comp_res, mpi_res, mtx_size)
+comp_res, mpi_res = ParseDctsOfSize(output_prelim, comp_res, mpi_res, mtx_size, prelim_size)
 mpi_dct = mpi_res
 print("SIZE: {0}".format(len(mpi_dct[mtx_size])))
 if merge == 1:
@@ -196,14 +206,15 @@ print('Answer ' * 8)
 # Now we are doing the main run
 batch_main = "batch_main_{0}.sh".format(mtx_size)
 if prelim_size < est_n:
-	output_main = 'main_' + gen_batch("batch_template.sh", batch_main, maxmins, int(est_n) - prelim_size, mtx_size, exe_file)
+	main_runs = int(est_n) - prelim_size
+	output_main = 'main_' + gen_batch("batch_template.sh", batch_main, maxmins, main_runs, mtx_size, exe_file)
 	print(60 * 'q')
 	call(['rm', output_main])
 	call(['llsubmit', batch_main])	
 	print(60 * 'q')
 	
 	WaitOutput()
-	comp_res, mpi_res = ParseDctsOfSize(output_main, comp_res, mpi_res, mtx_size)
+	comp_res, mpi_res = ParseDctsOfSize(output_main, comp_res, mpi_res, mtx_size, main_runs)
 	mpi_dct = mpi_res
 	print("SIZE main: {0}".format(len(mpi_dct[mtx_size])))
 	if merge == 1:
