@@ -166,6 +166,7 @@ if "prelim" in arg_dct:
 batch_new = "batch_prelim.sh"
 output_prelim = gen_batch("batch_template.sh", batch_new, maxmins, prelim_size, mtx_size, exe_file)
 print(60 * 'o')
+call(['rm', output_prelim])
 call(['llsubmit', batch_new])	
 print(60 * 'o')
 
@@ -195,8 +196,9 @@ print('Answer ' * 8)
 # Now we are doing the main run
 batch_main = "batch_main_{0}.sh".format(mtx_size)
 if prelim_size < est_n:
-	output_main = gen_batch("batch_template.sh", batch_main, maxmins, int(est_n) - prelim_size, mtx_size, exe_file)
+	output_main = 'main_' + gen_batch("batch_template.sh", batch_main, maxmins, int(est_n) - prelim_size, mtx_size, exe_file)
 	print(60 * 'q')
+	call(['rm', output_main])
 	call(['llsubmit', batch_main])	
 	print(60 * 'q')
 	
