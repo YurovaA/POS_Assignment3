@@ -14,7 +14,8 @@ int main (int argc, char **argv) {
 	MPI_Comm cartesian_grid_communicator, row_communicator, column_communicator;
 	MPI_Status status; 
 	MPI_Request recv_request_1;
-	MPI_Request recv_request_2, send_request_1, send_request_2;
+	MPI_Request recv_request_2;
+	MPI_Request send_request_1, send_request_2;
 
 	// used to manage the cartesian grid
 	int dimensions[2], periods[2], coordinates[2], remain_dims[2];
@@ -138,7 +139,8 @@ int main (int argc, char **argv) {
 	for(i=0; i < A_local_block_rows * B_local_block_columns; i++){
 		C_local_block[i] = 0;
 	}
-
+	
+	
 	// full arrays only needed at root
 	if(rank == 0){
 		A_array = (double *) malloc(sizeof(double) * A_rows * A_columns);
@@ -178,6 +180,7 @@ int main (int argc, char **argv) {
 		}
 		for(i = 0; i < A_local_block_size; i++){
 			A_local_block[i] = A_array[i];
+			
 		}
 		for(i = 0; i < B_local_block_size; i++){
 			B_local_block[i] = B_array[i];
@@ -189,28 +192,31 @@ int main (int argc, char **argv) {
 
 	// cannon's algorithm
 	int cannon_block_cycle;
-	int flag1, flag2;
+	int flag;
 	double compute_time = 0, mpi_time = 0, start_comm, start_comp;
 	int C_index, A_row, A_column, B_column;
-	double rcv_snd = 0;
-	double test_time = 0;
-	double wait_time = 0;
 	for(cannon_block_cycle = 0; cannon_block_cycle < sqrt_size; cannon_block_cycle++){
 		// compute partial result for this block cycle
-		flag1 = 0;
-		flag2 = 0;
 		start_comm = MPI_Wtime();
+		MPI_Isend(A_local_block, A_local_block_size, MPI_DOUBLE, 
+				(coordinates[1] + sqrt_size - 1) % sqrt_size, 0, row_communicator, &send_request_1);
+		// rotate blocks vertically
+		MPI_Isend(B_local_block, B_local_block_size, MPI_DOUBLE, 
+				(coordinates[0] + sqrt_size - 1) % sqrt_size, 0, column_communicator, &send_request_2);
 		MPI_Irecv(A_local_block_new, A_local_block_size, MPI_DOUBLE, (coordinates[1] + 1) % sqrt_size, 0, row_communicator, &recv_request_1);
 		MPI_Irecv(B_local_block_new, B_local_block_size, MPI_DOUBLE, (coordinates[0] + 1) % sqrt_size, 0, column_communicator, &recv_request_2);
-		MPI_Isend(A_local_block, A_local_block_size, MPI_DOUBLE, (coordinates[1] + sqrt_size - 1) % sqrt_size, 0, row_communicator, &send_request_1);
-		// rotate blocks vertically
-		MPI_Isend(B_local_block, B_local_block_size, MPI_DOUBLE, (coordinates[0] + sqrt_size - 1) % sqrt_size, 0, column_communicator, &send_request_2);
-		double wt = MPI_Wtime() - start_comm;
-		rcv_snd += wt;
-		mpi_time += wt;
+		mpi_time += MPI_Wtime() - start_comm;
 		start_comp = MPI_Wtime();
 		for(C_index = 0, A_row = 0; A_row < A_local_block_rows; A_row++){
-			for(B_column = 0; B_column < B_local_block_columns; B_column++, C_index++){				
+			for(B_column = 0; B_column < B_local_block_columns; B_column++, C_index++){
+
+				compute_time += MPI_Wtime() - start_comp;
+				start_comm = MPI_Wtime();
+				MPI_Iprobe((coordinates[1] + 1) % sqrt_size, 0, row_communicator, &flag, &status);
+				MPI_Iprobe((coordinates[0] + 1) % sqrt_size, 0, column_communicator, &flag, &status);
+				mpi_time += MPI_Wtime() - start_comm;
+				start_comp = MPI_Wtime();
+				
 				for(A_column = 0; A_column < A_local_block_columns; A_column++){
 					C_local_block[C_index] += A_local_block[A_row * A_local_block_columns + A_column] *
 						B_local_block[A_column * B_local_block_columns + B_column];
@@ -218,66 +224,25 @@ int main (int argc, char **argv) {
 				//compute_time += MPI_Wtime() - start_comp;
 				//start_comp = MPI_Wtime();
 			}
-			
-			compute_time += MPI_Wtime() - start_comp;
-			start_comm = MPI_Wtime();
-			//MPI_Probe(int source, int tag, MPI_Comm comm, MPI_Status *status)
-			//MPI_Probe((coordinates[1] + 1) % sqrt_size, 0, row_communicator, &status);
-			//MPI_Probe((coordinates[0] + 1) % sqrt_size, 0, column_communicator, &status);
-			if (C_index % 2 == 0) {
-				if (!flag1) {
-					MPI_Test(&recv_request_1, &flag1, &status);
-				} 
-			
-				if (!flag2) {
-					MPI_Test(&recv_request_2, &flag2, &status);
-				}
-			}
-			wt = MPI_Wtime() - start_comm;
-			test_time += wt;
-			mpi_time += wt;
-			start_comp = MPI_Wtime();
 
 		}
 		
-		compute_time += MPI_Wtime() - start_comp;
 		start_comm = MPI_Wtime();
 		// rotate blocks horizontally
 
-		//MPI_Wait(&send_request_1, &status);
-		//MPI_Wait(&send_request_2, &status);
-		if (!flag1) {
+		
 		MPI_Wait(&recv_request_1, &status);
-		}
-		if (!flag2){
 		MPI_Wait(&recv_request_2, &status);
-		}
+		mpi_time += MPI_Wtime() - start_comm;
 		
-		wt = MPI_Wtime() - start_comm;
-		wait_time += wt;
-		mpi_time += wt;
-		double * tmp = A_local_block;
+		double * tmp_A = A_local_block;
 		A_local_block = A_local_block_new;
-		A_local_block_new = tmp;
-
-		tmp = B_local_block;
-		B_local_block = B_local_block_new;
-		B_local_block_new = tmp;
+		A_local_block_new = tmp_A;
 		
-
+		double * tmp_B = B_local_block;
+		B_local_block = B_local_block_new;
+		B_local_block_new = tmp_B;
 	}
-	double overall_mpi_time;
-	double overall_rcv_snd;
-	double overall_test_time;
-	double overall_wait_time;
-	double overall_compute_time;
-	MPI_Reduce(&mpi_time, &overall_mpi_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&rcv_snd, &overall_rcv_snd, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&test_time, &overall_test_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&wait_time, &overall_wait_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-	MPI_Reduce(&compute_time, &overall_compute_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-	
-
 
 	// get C parts from other processes at rank 0
 	if(rank == 0) {
@@ -310,11 +275,8 @@ int main (int argc, char **argv) {
 		}
 
 		printf("(%d,%d)x(%d,%d)=(%d,%d)\n", A_rows, A_columns, B_rows, B_columns, A_rows, B_columns);
-		printf("Computation time: %lf\n", overall_compute_time/size);
-		printf("MPI time:         %lf\n", overall_mpi_time/size);
-		printf("Receive Send time:         %lf\n", overall_rcv_snd/size);
-		printf("Test time:         %lf\n", overall_test_time/size);
-		printf("Wait time:         %lf\n", overall_wait_time/size);		
+		printf("Computation time: %lf\n", compute_time);
+		printf("MPI time:         %lf\n", mpi_time);
 
 		if (argc == 4){
 			// present results on the screen
@@ -348,12 +310,12 @@ int main (int argc, char **argv) {
 					for(k=0; k<B_rows; k++){
 						temp += A[i][k] * B[k][j];
 					}
-					//printf("%7.3f ", temp);
+					printf("%7.3f ", temp);
 					if(temp != C[i][j]){
 						pass = 0;
 					}
 				}
-		//		printf("\n");
+				printf("\n");
 			}
 			if (pass) printf("Consistency check: PASS\n");
 			else printf("Consistency check: FAIL\n");
