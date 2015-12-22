@@ -1,0 +1,16 @@
+
+;Runs:;2;;Size:;4096
+;Computation time statistics
+;4096;
+means:;2.5904596;
+devs:;0.015615275897;
+conf.int(1):;0.134790051901;
+
+
+;MPI time statistics
+;4096;
+means:;0.21410585;
+devs:;0.0490669677281;
+conf.int(1):;5.12443145714;
+
+
